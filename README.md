@@ -14,7 +14,7 @@ tools to handle spatial transcriptome data
 | scipy    | 1.5.2    | generate sparse matrix                                     |
 | anndata  | 0.7.4    | generate h5ad format file to store gene expression matrix  |
 | optparse | 0.1.1    | manage command options.                                    |
-| scanpy   | 1.6.0.   | read h5ad format file and do cell cluster                  |
+| scanpy   | 1.6.0    | read h5ad format file and do cell cluster                  |
 
 ## Run
 
