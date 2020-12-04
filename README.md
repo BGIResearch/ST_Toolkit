@@ -34,7 +34,7 @@ Options:
   -t THREAD, --thread=THREAD
                         number of thread that will be used to run this
                         program. default=2
-                        
-  Required parameters:
-  * -i filename. Input gene expression matrix file in tsv format
-  * -0 file or directory name. Output path.
+```
+Required parameters:
+* -i filename. Input gene expression matrix file in tsv format
+* -0 file or directory name. Output path.
