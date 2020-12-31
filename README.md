@@ -49,11 +49,15 @@ Optional parameters:
 * -t THREAD, --thread=THREAD number of thread that will be used to run this program. default=2.
 * -w PROGRESS, --progress=PROGRESS number of progress that will be used to run this program, only useful for visulization. default=4.
 
-### action-tsv2h5ad
+#### action-tsv2h5ad
+description:
+  merge number of binSize*binSize dnb data to one spot and save new spatial gene expression matrix to h5ad format file. 
 e.g:
-    python3 ST_Handle_Exp.py tsv2h5ad -i merge_GetExp_gene.txt -o merge_GetExp_gene.h5ad -s 50
+  python3 ST_Handle_Exp.py tsv2h5ad -i merge_GetExp_gene.txt -o merge_GetExp_gene.h5ad -s 50
     
-### action-visualization
+#### action-visualization
+discription:
+  generate pickle format file with spatial gene expression matrix that has been grouped by different binSize.
 e.g:
-    python3 ST_Handle_Exp.py visualization -i merge_GetExp_gene.txt -o visualization -s 1000
+  python3 ST_Handle_Exp.py visualization -i merge_GetExp_gene.txt -o visualization -s 1000
 
