@@ -124,7 +124,7 @@ class Visualization():
         logging.info("start dnb pickle generation of bin{0}".format(binSize))
         start = time.time()
         dnbDf = geneBinDf['values'].groupby([geneBinDf['x'], geneBinDf['y']]).sum().to_frame()
-        dnbDf['gene-counts'] = geneBinDf['geneID'].groupby([geneBinDf['x'], geneBinDf['y']]).nunique()
+        dnbDf['gene_counts'] = geneBinDf['geneID'].groupby([geneBinDf['x'], geneBinDf['y']]).nunique()
         dnbDf.reset_index(inplace = True)
         binFile = os.path.join(self.dnbOutdir, "merge_dnb_bin{0}.pickle".format(binSize))
         dnbDf.to_pickle(binFile)
