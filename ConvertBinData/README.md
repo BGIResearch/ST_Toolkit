@@ -1,7 +1,6 @@
 # ConvertBinData
 Convert bin expression matrix into bin1 data
 
-## compile
 ## Platform & Environment
 * python3.6.5+
 
