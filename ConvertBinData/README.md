@@ -6,12 +6,12 @@ Convert bin expression matrix into bin1 data
 
 ## Prerequisties
 
-| Package  | Version  | Description                                                |
-| -------- | -------- | ---------------------------------------------------------- |
-| pandas   | <=1.0.1  | handle dataframe                                           |
-| numpy    | 1.19.1   |                                                            |
-| scipy    | 1.5.2    | generate sparse matrix                                     |
-| opencv   | 4.4.0    | generate h5ad format file to store gene expression matrix  |
+| Package  | Version  | Description            |
+| -------- | -------- | -----------------------|
+| pandas   | <=1.0.1  | handle dataframe       |
+| numpy    | 1.19.1   |                        |
+| scipy    | 1.5.2    | generate sparse matrix |
+| opencv   | 4.4.0    | Process image          |
 
 ## Run
 
