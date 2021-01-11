@@ -26,13 +26,14 @@ logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 TIME_FORMAT = "%y-%m-%d %H:%M:%S"
 
 def main():
-    actions = ["tsv2h5ad", "visualization"]
+    actions = ["tsv2h5ad", "cellCluster", "visualization", "convertBinData"]
     """
     %prog action [options]
     """
     parser = OptionParser(main.__doc__)
     parser.add_option("-i", "--in", action = "store", type = "str", dest = "inFile", help = "input gene expression matrix file path.")
     parser.add_option("-o", "--out", action = "store", type = "str", dest = "out", help = "output file or directory path.")
+    parser.add_option("-m", "--mask", action = "store", type = "str", dest = "mask", help = "lasso bin gene expression matrix get from stereomic visualization system.")
     parser.add_option("-s", "--binSize", action = "store", type = "int", dest = "binSize", default = 50, help = "The bin size or max bin szie that to combine the dnbs. default=50")
     parser.add_option("-t", "--thread", action = "store", type = "int", dest = "thread", default = 2, help = "number of thread that will be used to run this program. default=2")
     parser.add_option("-w", "--progress", action = "store", type = "int", dest = "progress", default = 4, help = "number of progress that will be used to run this program, only useful for visulization. default=4")
@@ -50,10 +51,18 @@ def main():
     action = args[0].upper()
     if (action == "TSV2H5AD"):
         slideBin = SlideBin(opts.inFile, opts.out, opts.binSize)
-        slideBin.bin_stat() 
+        slideBin.bin_stat()
+    elif (action == "CELLCLUSTER"):
+        cellCluster = CellCluster(opts.inFile, opts.out)
+        cellCluster.scanpyCluster()
     elif (action == "VISUALIZATION"):
         visualization = Visualization(opts.inFile, opts.out, opts.binSize, opts.progress)
         visualization.process()
+    elif (action == "CONVERTBINDATA"):
+        convertBinData = ConvertBinData()
+        convertBinData.ConvertData(opts.mask, opts.inFile, opts.out, opts.binSize)
+    else:
+        raise Exception("invalide action", 3)
 
 class SlideBin():
     def __init__(self, geneExpFile, outdir, binSize):
@@ -70,8 +79,8 @@ class SlideBin():
         if "MIDCounts" in df.columns:
             df.rename(columns={"MIDCounts": "UMICount"}, inplace=True)
         
-        df['x'] = (df['x']/self.binSize).astype(np.uint32)
-        df['y'] = (df['y']/self.binSize).astype(np.uint32)
+        df['x'] = (df['x']/self.binSize).astype(np.uint32)*self.binSize
+        df['y'] = (df['y']/self.binSize).astype(np.uint32)*self.binSize
         df['cell'] = df['x'].astype(str) + "-" + df['y'].astype(str)
         bindf = df['UMICount'].groupby([df['cell'], df['geneID']]).sum()
         cells = set(x[0] for x in bindf.index)
@@ -89,6 +98,40 @@ class SlideBin():
 
         resultFile = os.path.join(self.outdir, "{0}x{0}_adata.h5ad".format(self.binSize))
         adata.write(resultFile)
+
+class CellCluster():
+    def __init__(self, geneExpFile, outFile):
+        self.geneExpFile = geneExpFile
+        self.outFile = outFile
+
+    def scanpyCluster(self):
+        import scanpy as sc
+
+        if (self.geneExpFile.endswith(".h5ad")):
+            adata = sc.read_h5ad(self.geneExpFile)
+        else:
+            raise Exception("invalide file format", 1)
+
+        sc.pp.filter_cells(adata, min_genes=0)
+        sc.pp.filter_genes(adata, min_cells=0)
+        adata.var['mt'] = adata.var_names.str.startswith(('mt-', 'MT-'))
+        sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
+
+        adata.raw = adata
+        sc.pp.normalize_total(adata, target_sum=1e4)
+        sc.pp.log1p(adata)
+        if adata.var.shape[0] < 2000:
+            raise Exception("there are no enough genes for cluster.", 2)
+        sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=2000)
+        adata = adata[:, adata.var.highly_variable]
+        sc.pp.scale(adata, max_value=10)
+        sc.tl.pca(adata, svd_solver="arpack")
+        sc.pp.neighbors(adata, n_neighbors=10, n_pcs=10)
+        sc.tl.tsne(adata)
+        sc.tl.umap(adata)
+        sc.tl.leiden(adata)
+        sc.tl.rank_genes_groups(adata, 'leiden', method='t-test')
+        adata.write(self.outFile)
 
 class Visualization():
     def __init__(self, geneExpFile, outdir, maxBinSize=1000, progress=4):
@@ -177,6 +220,67 @@ class Visualization():
             pool.apply_async(self._get_pickle, (self.geneDf, binSize, ))
         pool.close()
         pool.join()
+
+class ConvertBinData():
+    """
+    # @ Author: Xiaoxuan Tang
+    # @ Create Time: 2021-01-06 11:26:59
+    # @ Modified by: xiaoxuan Tang
+    # @ Modified time: 2021-01-06 14:26:05
+    input: The lasso bin gene expression matrix; The complete gene expression matrix
+    return: Binsize=1 gene expression matrix.
+    """
+
+    def __init__(self):
+        self.typeColumn = {"geneID": 'str', "x": np.uint32, \
+                            "y": np.uint32, "values": np.uint32, 'MIDCount':np.uint32, \
+                            "MIDCounts":np.uint32, "UMICount": np.uint32}
+        
+    def __Dumpresult(self, mask, genedf):
+        dst = np.where(mask > 0)
+        dstx = dst[1]
+        dsty = dst[0]
+        tissue = pd.DataFrame()
+        tissue['x'] = [ii + self.Xmin for ii in dstx]
+        tissue['y'] = [ij + self.Ymin for ij in dsty]
+
+        mergedf = pd.merge(genedf, tissue, how='inner', on=['x', 'y'])
+
+        return mergedf
+
+    def __CreateImg(self, df):
+        bindf = pd.DataFrame()
+        bindf['x'] = df['x'] - self.Xmin
+        bindf['y'] = df['y'] - self.Ymin
+        bindf['values'] = [255] * len(df)
+        
+        sparseMt = sparse.csr_matrix((bindf['values'].astype(np.uint8), (bindf['y'], bindf['x'])))
+        img = sparseMt.toarray()
+        return img
+
+    def ConvertData(self, partfile, genefile, outFile, binSize):
+        import cv2
+        ### Initial data
+        if binSize > 50:
+            raise ValueError("Binsize could not larger than 50.")
+
+        genedf = pd.read_csv(genefile, sep='\t', dtype=self.typeColumn)
+        partdf = pd.read_csv(partfile, sep='\t', dtype=self.typeColumn)
+        
+        if len(genedf) < len(partdf):
+            raise Warning("Inputs are not correct.")
+        self.Xmin = genedf['x'].min()
+        self.Ymin = genedf['y'].min()
+        print("Processing data..")
+        ### Create Mask
+        part_img = self.__CreateImg(partdf)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*binSize, 2*binSize))
+        mask = cv2.morphologyEx(part_img, cv2.MORPH_CLOSE, kernel)
+
+        ### Dump results
+        mergedf = self.__Dumpresult(mask, genedf)
+        mergedf.to_csv(outFile, sep="\t")
+        #return mergedf
 
 if __name__ == "__main__":
     main()
