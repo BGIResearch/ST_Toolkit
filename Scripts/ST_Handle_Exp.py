@@ -112,12 +112,13 @@ class CellCluster():
         else:
             raise Exception("invalide file format", 1)
 
+        adata.layers['raw_data'] = adata.X
+
         sc.pp.filter_cells(adata, min_genes=0)
         sc.pp.filter_genes(adata, min_cells=0)
         adata.var['mt'] = adata.var_names.str.startswith(('mt-', 'MT-'))
         sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
 
-        adata.raw = adata
         sc.pp.normalize_total(adata, target_sum=1e4)
         sc.pp.log1p(adata)
         if adata.var.shape[0] < 2000:
@@ -130,7 +131,8 @@ class CellCluster():
         sc.tl.tsne(adata)
         sc.tl.umap(adata)
         sc.tl.leiden(adata)
-        sc.tl.rank_genes_groups(adata, 'leiden', method='t-test')
+        adata.obs['louvain'] = adata.obs['leiden']
+        sc.tl.rank_genes_groups(adata, 'leiden', method='wilcoxon', use_raw=False, n_genes=300, pts=True, layer='raw_data')
         adata.write(self.outFile)
 
 class Visualization():
@@ -214,12 +216,16 @@ class Visualization():
         binSizeList = filter(lambda x: x<=self.maxBinSize, binSizeList)
         self._get_geneTable()
         self._get_dnbRange()
-       
-        pool = Pool(self.progress)
-        for binSize in binSizeList:
-            pool.apply_async(self._get_pickle, (self.geneDf, binSize, ))
-        pool.close()
-        pool.join()
+        
+        if (self.process == 1):
+            for binSize in binSizeList:
+                self.get_pickle(sefl.geneDf, binSize)
+        else:
+            pool = Pool(self.progress)
+            for binSize in binSizeList:
+                pool.apply_async(self._get_pickle, (self.geneDf, binSize, ))
+            pool.close()
+            pool.join()
 
 class ConvertBinData():
     """
