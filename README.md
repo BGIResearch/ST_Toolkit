@@ -77,3 +77,4 @@ description:
   when you get the gene expression matrix with specified binSize using the lesso tool of stereomics which can extract data of certain areas, and want to get the original gene expression matrix of binSize 1 under the certain areas. The convertBinData action can help to achieve. Please give the same binSize option as your lesso data, and the binSize of lesso data shouldn't be greater than 50.
 e.g:
   python3 ST_Handle_Exp.py convertBinData -i merge_GetExp_gene.txt -m gene_bin50_lesso.txt -o tissue_gene_expression.txt -s 50
+```
