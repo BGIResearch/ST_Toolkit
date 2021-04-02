@@ -219,7 +219,7 @@ class Visualization():
         
         if (self.process == 1):
             for binSize in binSizeList:
-                self.get_pickle(sefl.geneDf, binSize)
+                self.get_pickle(self.geneDf, binSize)
         else:
             pool = Pool(self.progress)
             for binSize in binSizeList:
