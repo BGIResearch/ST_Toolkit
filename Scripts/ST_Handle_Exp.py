@@ -219,7 +219,7 @@ class Visualization():
         
         if (self.process == 1):
             for binSize in binSizeList:
-                self.get_pickle(sefl.geneDf, binSize)
+                self.get_pickle(self.geneDf, binSize)
         else:
             pool = Pool(self.progress)
             for binSize in binSizeList:
@@ -255,13 +255,21 @@ class ConvertBinData():
         return mergedf
 
     def __CreateImg(self, df):
-        bindf = pd.DataFrame()
-        bindf['x'] = df['x'] - self.Xmin
-        bindf['y'] = df['y'] - self.Ymin
-        bindf['values'] = [255] * len(df)
-        
-        sparseMt = sparse.csr_matrix((bindf['values'].astype(np.uint8), (bindf['y'], bindf['x'])))
-        img = sparseMt.toarray()
+        _, Xmax, Ymax, _ = df.max()
+        image = np.zeros([Ymax - self.Ymin + 1, Xmax - self.Xmin + 1], np.uint16)
+        print("bin image shape ", image.shape)
+        ### Create image
+        for index, value in df.iterrows():
+            xx = value['x']
+            yy = value['y']
+            image[yy - self.Ymin][xx - self.Xmin] = 255
+
+        Imin, Imax = image.min(), image.max()
+        Omin, Omax = 0, 255
+        a = float(Omax-Omin)/(Imax-Imin)
+        b = Omin - a*Imin
+        img = a*image + b
+        img = img.astype(np.uint8)
         return img
 
     def ConvertData(self, partfile, genefile, outFile, binSize):
