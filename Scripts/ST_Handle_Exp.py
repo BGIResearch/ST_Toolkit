@@ -136,96 +136,164 @@ class CellCluster():
         adata.write(self.outFile)
 
 class Visualization():
-    def __init__(self, geneExpFile, outdir, maxBinSize=1000, progress=4):
+    def __init__(self, geneExpFile, outdir, maxBinSize=200, progress=4, img_out=True):
         self.geneExpFile = geneExpFile
         self.outdir = outdir
         self.maxBinSize = maxBinSize
         self.progress = progress
-        self.geneDf = pd.read_csv(self.geneExpFile, sep="\t")
+        self.img_out = img_out
+        self.geneDf = pd.read_csv(self.geneExpFile, sep="\t", quoting=csv.QUOTE_NONE)
         if "MIDCounts" in self.geneDf.columns:
             self.geneDf.rename(columns={"MIDCounts": "values"}, inplace=True)
-        else:
+        elif 'UMICount' in self.geneDf.columns:
             self.geneDf.rename(columns = {"UMICount": "values"}, inplace=True)
+        elif 'MIDCount' in self.geneDf.columns:
+            self.geneDf.rename(columns={"MIDCount": "values"}, inplace=True)
         dtypes = {"x": np.uint32, "y": np.uint32, "geneID": object, "values": np.uint32}
         self.geneDf.astype(dtypes, copy=False)
+        self.geneDf['geneID'] = self.geneDf['geneID'].apply(lambda x: str(x).replace("/", "_"))
         os.makedirs(self.outdir, exist_ok=True)
-        self.geneOutdir = os.path.join(outdir, "gene_merge")
         self.dnbOutdir = os.path.join(outdir, "dnb_merge")
-        os.makedirs(self.geneOutdir, exist_ok=True)
         os.makedirs(self.dnbOutdir, exist_ok=True)
 
-    def _get_geneTable(self):
-        geneTable = self.geneDf['values'].groupby(self.geneDf['geneID']).sum().to_frame()
-        geneTable.reset_index(inplace = True)
-        geneTable.to_pickle(os.path.join(self.geneOutdir, "gene_table.pickle"))
+    def write_h5_total(self):
+        total_outf = os.path.join(self.outdir, 'stereomics_total.h5')
+        hdf5_fh = h5py.File(total_outf, "w")
+        hdf5_dnb_group = hdf5_fh.create_group('dnb_merge')
+        hdf5_gene_group = hdf5_fh.create_group('gene_merge')
 
-    def _get_dnbRange(self):
-        dnb_range_file = os.path.join(self.dnbOutdir, "dnb_range.json")
-        dnb_range_map = {"min_x": int(self.geneDf['x'].min()), "max_x": int(self.geneDf['x'].max()), "min_y": int(self.geneDf['y'].min()), "max_y": int(self.geneDf['y'].max())}
-        with open(dnb_range_file, 'w') as jsonHandle:
-            json.dump(dnb_range_map, jsonHandle)
+        # save gene table
+        gene_table_df = self.geneDf['values'].groupby(self.geneDf['geneID']).sum().reset_index()
+        gene_table_df = gene_table_df.sort_values(by=['values'], ascending=False)
+        gene_table_group = hdf5_gene_group.create_group('gene_table')
+        gene_list = gene_table_df['geneID'].astype('S')
+        gene_table_group['Gene'] = gene_list
+        gene_table_group.create_dataset('MIDCounts', data=gene_table_df['values'], dtype='int32')
 
-    def _get_dnb_pickle(self, geneBinDf, binSize):
-        logging.info("start dnb pickle generation of bin{0}".format(binSize))
-        start = time.time()
-        dnbDf = geneBinDf['values'].groupby([geneBinDf['x'], geneBinDf['y']]).sum().to_frame()
-        dnbDf['gene_counts'] = geneBinDf['geneID'].groupby([geneBinDf['x'], geneBinDf['y']]).nunique()
-        dnbDf.reset_index(inplace = True)
-        binFile = os.path.join(self.dnbOutdir, "merge_dnb_bin{0}.pickle".format(binSize))
-        dnbDf.to_pickle(binFile)
-        if (binSize==200):
-            self._get_fig(dnbDf, 200)
-        logging.info("finish dnb pickle generation of bin{0}".format(binSize))
-        end = time.time()
-        logging.info("time used for bin{0} generation: {1}".format(binSize, end-start))
+        # save dnb range
+        dnb_range_dict = {'min_x': int(self.geneDf['x'].min()), 'max_x':int(self.geneDf['x'].max()), 'min_y':int(self.geneDf['y'].min()), 'max_y':int(self.geneDf['y'].max())}
+        dt = h5py.special_dtype(vlen=str)
+        dnb_range_arr = hdf5_dnb_group.create_dataset('dnb_range', (1,), dtype=dt)
+        dnb_range_arr[0] = json.dumps(dnb_range_dict)
 
-    def _get_fig(self, dnbDf, binSize):
-        cmap = mpl.colors.ListedColormap(['#0C3383', '#0A88BA', '#F2D338', '#F28F38', '#D91E1E'])
-        x_range = dnbDf['x'].max() - dnbDf['x'].min()
-        y_range = dnbDf['y'].max() - dnbDf['y'].min()
+        hdf5_fh.close()
 
-        plt.figure(figsize=(1,y_range/x_range))
-        plt.scatter(dnbDf['x'], dnbDf['y'], c=dnbDf['values'], s=1, cmap=cmap)
-        plt.axis('off')
-        plt.savefig(os.path.join(self.dnbOutdir, "bin{0}.png".format(binSize)))
+    def write_bin_h5(self, geneBinDf, bin_size, img_out):
+        bin_file_name = 'stereomics_' + str(bin_size) +  '.h5'
+        bin_outf = os.path.join(self.outdir, bin_file_name)
+        hdf5_fh_bin = h5py.File(bin_outf, "w")
+        hdf5_dnb_group_bin = hdf5_fh_bin.create_group('dnb_merge')
+        hdf5_gene_group_bin = hdf5_fh_bin.create_group('gene_merge')
 
-    def _get_gene_pickle(self, geneBinDf, binSize):
-        logging.info("start gene pickle generation of bin{0}".format(binSize))
-        start = time.time()
-        if (binSize == 1):
-            groupDf = geneBinDf
-        else:
-            geneBinDf['x'] = geneBinDf['x'].map(lambda x: int(x/binSize)*binSize).astype(np.uint32)
-            geneBinDf['y'] = geneBinDf['y'].map(lambda y: int(y/binSize)*binSize).astype(np.uint32)
-            geneBinDf['geneID'] = geneBinDf['geneID'].astype(str)
-            groupDf = geneBinDf['values'].groupby([geneBinDf['x'], geneBinDf['y'], geneBinDf['geneID']]).sum().reset_index()
-            groupDf['geneID'] = groupDf['geneID'].astype('category')
-        geneBinFile = os.path.join(self.geneOutdir, "merge_gene_bin{0}.pickle".format(binSize))
-        groupDf.to_pickle(geneBinFile)
-        logging.info("finish gene pickle generation of bin {0}".format(binSize))
-        end = time.time()
-        logging.info("time used for bin{0} generation: {1}".format(binSize, end-start))
-        return groupDf
-    
-    def _get_pickle(self, geneBinDf, binSize):
-        groupDf = self._get_gene_pickle(geneBinDf, binSize)
-        self._get_dnb_pickle(groupDf, binSize)
+        ##gene
+        merge_gene_dff = self.merge_gene_v2(geneBinDf, bin_size, bin_size)
+        h5_gene_bin_group = hdf5_gene_group_bin.create_group(f'bin{bin_size}')
+        for gene, value in merge_gene_dff.groupby(merge_gene_dff.geneID):
+            h5_gene_bin_group.create_dataset(gene, data=value[['x','y','values']], dtype='int32')
+
+        #dnb
+        merge_dnb_dff = self.merge_dnb_v2(merge_gene_dff, bin_size, bin_size)
+        if bin_size==200 and img_out:
+            if not os.path.exists(self.dnbOutdir):
+                os.makedirs(self.dnbOutdir)
+            self.getFig(merge_dnb_dff, os.path.join(self.dnbOutdir, 'bin200.png'), scale=20, dpi=72)
+        hdf5_dnb_group_bin.create_dataset(f'bin{bin_size}', data=merge_dnb_dff, dtype='int32')
+
+        hdf5_fh_bin.close()
+
+
+    def merge_gene_v2(self, gene_df, dot_x, dot_y):
+        #gene merge
+        gene_dff = gene_df.copy()
+        if (dot_x > 1 or dot_y > 1):
+            gene_dff['x'] = (gene_dff['x']/dot_x).astype('int')*dot_x
+            gene_dff['y'] = (gene_dff['y']/dot_y).astype('int')*dot_y
+        gene_dff = gene_dff['values'].groupby([gene_dff['x'], gene_dff['y'], gene_dff['geneID']]).sum().reset_index()
+        return gene_dff
+
+    def merge_dnb_v2(self, dnb_df, dot_x, dot_y):
+        dnb_dff = dnb_df.copy()
+        #dnb_dff['x'] = (dnb_dff['x']/dot_x).astype('int')*dot_x
+        #dnb_dff['y'] = (dnb_dff['y']/dot_y).astype('int')*dot_y
+        dnb_dff_tmp = dnb_dff['values'].groupby([dnb_dff['x'], dnb_dff['y']]).sum().reset_index()
+        gene_count = dnb_dff['geneID'].groupby([dnb_dff['x'], dnb_dff['y']]).nunique().reset_index()
+        dnb_dff_tmp['gene_counts'] = gene_count['geneID']
+        return dnb_dff_tmp
+
+    def getFig(self, data, outfile, scale=1, dpi=72):
+        try:
+            cmap = mpl.colors.ListedColormap(['#0C3383', '#0A88BA', '#F2D338', '#F28F38', '#D91E1E'])
+            x_range=max(data['x']) - min(data['x'])
+            y_range=max(data['y']) - min(data['y'])
+            x_num = len(data['x'].drop_duplicates())
+
+            plt.figure(figsize=(1*scale,y_range/x_range*scale), facecolor='#262B3D', edgecolor='black') ## 设置图像大小 inch
+            ##去掉图像旁边的空白区
+            plt.gca().xaxis.set_major_locator(plt.NullLocator())
+            plt.gca().yaxis.set_major_locator(plt.NullLocator())
+            plt.gca().xaxis.set_ticks_position('top')
+            plt.gca().invert_yaxis()
+            plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
+            plt.margins(0,0)
+            ##添加标题
+            #plt.title('Interesting Graph',loc ='center')
+
+            x=data['x']
+            y=data['y']
+            color=data['values']
+            #factor = math.ceil(scale/5)
+            #dot_size = math.ceil((dpi * scale)*factor/x_num)
+            r = scale*72/(x_range/200)
+            dot_size = r**2
+            plt.scatter(x, y, c=color, s=dot_size, cmap=cmap)
+            plt.axis('off')
+            plt.savefig(outfile,facecolor='#262B3D', dpi=dpi, pad_inches = 0)
+            return True
+        except Exception as e:
+            print(e)
+            return False
+
+    def copy(self, h5_in, h5_out):
+        if 'gene_merge' in h5_in.keys():
+            for i in h5_in['gene_merge']:
+                if i not in h5_out['gene_merge'].keys():
+                    h5_in.copy('gene_merge/' + i, h5_out['gene_merge'])
+        if 'dnb_merge' in h5_in.keys():
+            for i in h5_in['dnb_merge']:
+                if i not in h5_out['dnb_merge'].keys():
+                    h5_in.copy('dnb_merge/' + i, h5_out['dnb_merge'])
+
+    def h5_join(self):
+        d_names = os.listdir(self.outdir)
+        final_outf = os.path.join(self.outdir, 'stereomics.h5')
+        h5_out = h5py.File(final_outf, "w")
+        h5_out.create_group('gene_merge')
+        h5_out.create_group('dnb_merge')
+        for h5name in d_names:
+            if h5name.endswith('h5') and h5name != 'stereomics.h5':
+                full_file_name = os.path.join(self.outdir, h5name)
+                h5_in = h5py.File(full_file_name, mode = 'r')
+                self.copy(h5_in, h5_out)
+                h5_in.close()
+                os.remove(full_file_name)
+
+        h5_out.close()
 
     def process(self):
-        binSizeList = [1, 2, 5, 8, 10, 15, 20, 30, 50, 80, 100, 120, 150, 180, 200, 250, 300, 400, 500, 600, 800, 1000]
+        binSizeList = [1,2,5,10,15,20,50,80,100,150,200]
         binSizeList = filter(lambda x: x<=self.maxBinSize, binSizeList)
-        self._get_geneTable()
-        self._get_dnbRange()
-        
-        if (self.process == 1):
+        self.write_h5_total()
+       
+        if (self.progress == 1):
             for binSize in binSizeList:
-                self.get_pickle(self.geneDf, binSize)
+                self.write_bin_h5(self.geneDf, binSize, self.img_out)
         else:
             pool = Pool(self.progress)
             for binSize in binSizeList:
-                pool.apply_async(self._get_pickle, (self.geneDf, binSize, ))
+                pool.apply_async(self.write_bin_h5, (self.geneDf, binSize, self.img_out,))
             pool.close()
             pool.join()
+        self.h5_join()
 
 class ConvertBinData():
     """
