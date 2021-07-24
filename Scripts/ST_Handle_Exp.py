@@ -171,46 +171,11 @@ class CellCluster():
         adata.obs['louvain'] = adata.obs['leiden']
         sc.tl.rank_genes_groups(adata, 'leiden', method='wilcoxon', use_raw=False, n_genes=300, pts=True, layer='raw_data')
         adata.write(self.outFile)
-
-class CellCluster_hdf5():
-    def __init__(self, geneExpFile, outFile, binSize=100):
-        self.geneExpFile = geneExpFile
-        self.outFile = outFile
-        self.binSize = binSize
-
-    def process(self):
-        hdf5_fh = h5py.File(self.outFile, "w")
-        try:
-            hdf5_bin1_group = hdf5_fh.create_group("bin1")
-            hdf5_cellCluster_group = hdf5_fh.create_group("cellCluster")
-        except Exception as e:
-            print(e)
-            return False
-
-    def dataSplit(self, genesdic, hdf5_bin1_group):
-        windowSize = 100
-        columnsType = {'x': np.uint32, 'y': np.uint32, 'geneID': 'str', 'values': np.uint32}
-        geneDf = pd.read_csv(self.geneExpFile, sep='\t', quoting=csv.QUOTE_NONE)
-        if "MIDCounts" in df.columns:
-            df.rename(columns={"MIDCounts": "values"}, inplace=True)
-        elif "UMICount" in df.columns:
-            df.rename(columns={"UMICount": "values"}, inplace=True)
-        elif 'MIDCount' in df.columns:
-            df.rename(columns={"MIDCount": "UMICount"}, inplace=True)
-        geneDf.astype(columnsType, copy=False)
-        geneDf['bin_x'] = (geneDf['x']/windowSize).astype(int)
-        geneDf['bin_y'] = (geneDf['y']/windowSize).astype(int)
-        geneDf['bin'] = geneDf['bin_x'].astype('str') + '-' + geneDf['bin_y'].astype('str')
-        geneDf['geneID'] = geneDf['geneID'].map(lambda x: genesdic[x])
-        groupDf = geneDf.groupby('bin')
-        groups = groupDf.groups
-        for groupName, group in groups:
-            hdf5_bin1_group.create_dataset(groupName, data=group[['x', 'y', 'geneID', 'values']], dtype='int32')
             
     def scanpyCluster(self):
         import scanpy as sc
         import anndata
-        slidebin = slideBin(self.geneExpFile, os.path.dirname(self.outFile), self.binSize)
+        slidebin = SlideBin(self.geneExpFile, os.path.dirname(self.outFile), self.binSize)
         if (self.geneExpFile.endswith(".txt")):
             adata, genesdic = slidebin.slideBin()
         else:
