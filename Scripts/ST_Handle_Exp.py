@@ -29,13 +29,12 @@ logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 TIME_FORMAT = "%y-%m-%d %H:%M:%S"
 
 def main():
-    actions = ["tsv2h5ad", "dnbMatting", "dnbFilter", "cellCluster", "visualization", "saturationPlot"]
+    actions = ["tsv2h5ad", "dnbMatting", "cellCluster", "visualization", "saturationPlot"]
     """
     %prog action [options]
     """
     parser = OptionParser(main.__doc__)
     parser.add_option("-i", "--in", action = "store", type = "str", dest = "inFile", help = "input gene expression matrix file path.")
-    parser.add_option("-b", "--bbox", action = "store", type = "str", dest = "bbox", help = "coordinate range to cut the gene expression matrix")
     parser.add_option("-o", "--out", action = "store", type = "str", dest = "out", help = "output file or directory path.")
     parser.add_option("-s", "--binSize", action = "store", type = "int", dest = "binSize", default = 50, help = "The bin size or max bin szie that to combine the dnbs. default=50")
     parser.add_option("--geneNumber", action = "store", type = "int", dest = "geneNumber", default = 2000, help = "number of genes will be used to cluster bins.")
@@ -62,9 +61,6 @@ def main():
     elif (action == "DNBMATTING"):
         dnbMatting = DnbMatting(opts.inFile, opts.out, opts.binSize)
         dnbMatting.dnb_matting()
-    elif (action == "DNBFILTER"):
-        dnbFilter = DnbFilter(opts.inFile, opts.out, opts.bbox)
-        dnbFilter.dnb_filter()
     elif (action == "VISUALIZATION"):
         visualization = Visualization(opts.inFile, opts.out, opts.binSize, opts.progress)
         visualization.process()
@@ -243,20 +239,6 @@ class CellCluster_hdf5():
         sc.tl.rank_genes_groups(adata, 'leiden', method='wilcoxon', use_raw=False, n_genes=300, pts=True, layer='raw_data')
         adata.write(self.outFile)
 
-class DnbFilter():
-    def __init__(self, geneExpFile, outfile, bbox):
-        self.geneExpFile = geneExpFile
-        self.outfile = outfile
-        self.bbox = bbox
-    
-    def dnb_filter(self):
-        bdf = pd.read_csv(self.bbox, sep="\t")
-        x1, y1, x2, y2 = bdf.loc(0)[0].values
-        expColumnTypes = {"x": np.uint32, "y": np.uint32, "geneID": 'category', "MIDCount": np.uint32}
-        df = pd.read_csv(self.geneExpFile, sep="\t", dtype=expColumnTypes)     
-        filterdf = df.loc[(df['x']>=x1)&(df['x']<=x2)&(df['y']>=y1)&(df['y']<=y2)]
-        filterdf.to_csv(self.outfile, sep="\t", index=None)
-
 class DnbMatting():
     def __init__(self, geneExpFile, outdir, binSize=50):
         self.geneExpFile = geneExpFile
@@ -266,13 +248,11 @@ class DnbMatting():
 
     def dnb_matting(self):
         import cv2
-        #expColumnTypes = {"barcode": object, "geneID": 'category', "MIDCount": np.uint32}
-        #geneDf = pd.read_csv(self.geneExpFile, header=None, names=["barcode", "geneID", "MIDCount"], sep="\t", dtype=expColumnTypes, quoting=csv.QUOTE_NONE)
-        expColumnTypes = {"x": np.uint32, "y": np.uint32, "geneID": 'category', "MIDCount": np.uint32}
-        geneDf = pd.read_csv(self.geneExpFile, sep="\t", dtype=expColumnTypes, quoting=csv.QUOTE_NONE)
-        #geneDf['x'] = geneDf['barcode'].apply(lambda x: int(x.split("_")[-2]))
-        #geneDf['y'] = geneDf['barcode'].apply(lambda x: int(x.split("_")[-1]))
-        #geneDf.drop(['barcode'], axis=1, inplace=True)
+        expColumnTypes = {"barcode": object, "geneID": 'category', "MIDCount": np.uint32}
+        geneDf = pd.read_csv(self.geneExpFile, header=None, names=["barcode", "geneID", "MIDCount"], sep="\t", dtype=expColumnTypes, quoting=csv.QUOTE_NONE)
+        geneDf['x'] = geneDf['barcode'].apply(lambda x: int(x.split("_")[-2]))
+        geneDf['y'] = geneDf['barcode'].apply(lambda x: int(x.split("_")[-1]))
+        geneDf.drop(['barcode'], axis=1, inplace=True)
 
         #generate bin image
         tempDf = geneDf[['x', 'y', 'MIDCount']].copy()
@@ -319,8 +299,6 @@ class DnbMatting():
             Ys = box[...,1]
             bx1, bx2, by1, by2 = (min(Xs)+x1-0.5)*self.binSize, (max(Xs)+x1+0.5)*self.binSize, (min(Ys)+y1-0.5)*self.binSize, (max(Ys)+y1+0.5)*self.binSize
             filterGene = geneDf.loc[(geneDf['x']>=bx1)&(geneDf['x']<=bx2)&(geneDf['y']>=by1)&(geneDf['y']<=by2)]
-            filterGene['x'] = filterGene['x'] - filterGene['x'].min()
-            filterGene['y'] = filterGene['y'] - filterGene['y'].min()
             cv2.drawContours(img, [box], -1, (255, 0, 0), 1)
             cv2.imwrite(imageFile, img)
 
