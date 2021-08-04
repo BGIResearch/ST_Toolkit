@@ -9,6 +9,7 @@
 import os, sys
 import pandas as pd
 import numpy as np
+from pandas.core.reshape.merge import merge
 import scipy
 from scipy import ndimage
 import matplotlib as mpl
@@ -29,7 +30,7 @@ logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 TIME_FORMAT = "%y-%m-%d %H:%M:%S"
 
 def main():
-    actions = ["tsv2h5ad", "dnbMatting", "cellCluster", "visualization", "saturationPlot"]
+    actions = ["tsv2h5ad", "dnbMatting", "cellCluster", "visualization", "convertBinData", "saturationPlot", "mergeGem"]
     """
     %prog action [options]
     """
@@ -37,6 +38,7 @@ def main():
     parser.add_option("-i", "--in", action = "store", type = "str", dest = "inFile", help = "input gene expression matrix file path.")
     parser.add_option("-o", "--out", action = "store", type = "str", dest = "out", help = "output file or directory path.")
     parser.add_option("-s", "--binSize", action = "store", type = "int", dest = "binSize", default = 50, help = "The bin size or max bin szie that to combine the dnbs. default=50")
+    parser.add_option("-m", "--mask" , action = "store", type = "str", dest = "mask", help = "input gene expression matrix file generated from lesso tool of the stereomap system.")
     parser.add_option("--geneNumber", action = "store", type = "int", dest = "geneNumber", default = 2000, help = "number of genes will be used to cluster bins.")
     parser.add_option("-t", "--thread", action = "store", type = "int", dest = "thread", default = 8, help = "number of thread that will be used to run this program. default=2")
     parser.add_option("-w", "--progress", action = "store", type = "int", dest = "progress", default = 1, help = "number of progress that will be used to run this program, only useful for visulization. default=4")
@@ -56,7 +58,7 @@ def main():
         slideBin = SlideBin(opts.inFile, opts.out, opts.binSize)
         slideBin.process()
     elif (action == "CELLCLUSTER"):
-        cellCluster = CellCluster(opts.inFile, opts.out)
+        cellCluster = CellCluster(opts.inFile, opts.out, opts.binSize)
         cellCluster.scanpyCluster()
     elif (action == "DNBMATTING"):
         dnbMatting = DnbMatting(opts.inFile, opts.out, opts.binSize)
@@ -64,9 +66,15 @@ def main():
     elif (action == "VISUALIZATION"):
         visualization = Visualization(opts.inFile, opts.out, opts.binSize, opts.progress)
         visualization.process()
+    elif (action == "CONVERTBINDATA"):
+        convertBinData = ConvertBinData(opts.mask, opts.inFile, opts.out, opts.binSize)
+        convertBinData.ConvertData()        
     elif (action == "SATURATIONPLOT"):
         saturationPlot = SaturationPlot(opts.inFile, opts.out)
         saturationPlot.process()
+    elif (action == "MERGEGEM"):
+        mergeGem = MergeGem(opts.inFile, opts.out)
+        mergeGem.mergeGem()
     else:
         raise Exception("invalide action", 3)
 
@@ -81,7 +89,7 @@ class SlideBin():
     def bin_stat(self):
         import anndata
         import scanpy as sc
-        df = pd.read_csv(self.geneExpFile, sep="\t", quoting=csv.QUOTE_NONE)
+        df = pd.read_csv(self.geneExpFile, sep="\t", quoting=csv.QUOTE_NONE, comment="#")
         if "MIDCounts" in df.columns:
             df.rename(columns={"MIDCounts": "UMICount"}, inplace=True)
         elif 'values' in df.columns:
@@ -112,9 +120,10 @@ class SlideBin():
         adata.write(resultFile)
 
 class CellCluster():
-    def __init__(self, geneExpFile, outFile):
+    def __init__(self, geneExpFile, outFile, binSize):
         self.geneExpFile = geneExpFile
         self.outFile = outFile
+        self.binSize = binSize
 
     def scanpyCluster(self):
         import scanpy as sc
@@ -122,16 +131,24 @@ class CellCluster():
 
         if (self.geneExpFile.endswith(".h5ad")):
             adata = sc.read_h5ad(self.geneExpFile)
-        elif (self.geneExpFile.endswith(".txt")):
-            df = pd.read_csv(self.geneExpFile, sep="\t", quoting=csv.QUOTE_NONE)
+        else:
+            df = pd.read_csv(self.geneExpFile, sep="\t", quoting=csv.QUOTE_NONE, comment="#")
             if "MIDCounts" in df.columns:
                 df.rename(columns={"MIDCounts": "UMICount"}, inplace=True)
             elif 'values' in df.columns:
                 df.rename(columns={"values": "UMICount"}, inplace=True)
             elif 'MIDCount' in df.columns:
                 df.rename(columns={"MIDCount": "UMICount"}, inplace=True)
-            df['cell'] = df['x'].astype(str) + "-" + df['y'].astype(str)
-            bindf = df['UMICount'].groupby([df['cell'], df['geneID']]).sum()
+            if 'label' not in df.columns:
+                df['x'] = (df['x']/self.binSize).astype(np.uint32)*self.binSize
+                df['y'] = (df['y']/self.binSize).astype(np.uint32)*self.binSize
+                df['label'] = df['x'].astype(str) + "-" + df['y'].astype(str)
+            else:
+                labelFile = os.path.join(os.path.dirname(self.geneExpFile), "merge_GetExp_gene_labeled_stat.txt")
+                labeldf = pd.read_csv(labelFile, sep="\t")
+                labeldict=dict(zip(labeldf['label'], labeldf['x'].astype(str)+"_"+labeldf['y'].astype(str)))
+                df.replace({'label': labeldict}, inplace=True)
+            bindf = df['UMICount'].groupby([df['label'], df['geneID']]).sum()
             cells = set(x[0] for x in bindf.index)
             genes = set(x[1] for x in bindf.index)
             cellsdic = dict(zip(cells, range(0, len(cells))))
@@ -144,47 +161,15 @@ class CellCluster():
             var = pd.DataFrame(index = genes)
             adata = anndata.AnnData(X = expMtx, obs = obs, var = var)
             adata.write(self.outFile)
+            del(df)
+            del(bindf)
             adata = sc.read_h5ad(self.outFile) 
-        else:
-            raise Exception("invalide file format", 1)
 
         adata.layers['raw_data'] = adata.X
 
         sc.pp.filter_cells(adata, min_genes=0)
         sc.pp.filter_genes(adata, min_cells=0)
         adata.var['mt'] = adata.var_names.str.decode('utf-8').str.startswith(('mt-', 'MT-'))
-        sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
-
-        adata.raw = adata
-        sc.pp.normalize_total(adata, target_sum=1e4)
-        sc.pp.log1p(adata)
-        if adata.var.shape[0] < 2000:
-            return 0
-        sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=2000)
-        adata = adata[:, adata.var.highly_variable]
-        sc.pp.scale(adata, max_value=10)
-        sc.tl.pca(adata, svd_solver="arpack")
-        sc.pp.neighbors(adata, n_neighbors=10, n_pcs=10)
-        sc.tl.tsne(adata)
-        sc.tl.umap(adata)
-        sc.tl.leiden(adata)
-        adata.obs['louvain'] = adata.obs['leiden']
-        sc.tl.rank_genes_groups(adata, 'leiden', method='wilcoxon', use_raw=False, n_genes=300, pts=True, layer='raw_data')
-        adata.write(self.outFile)
-            
-    def scanpyCluster(self):
-        import scanpy as sc
-        import anndata
-        slidebin = SlideBin(self.geneExpFile, os.path.dirname(self.outFile), self.binSize)
-        if (self.geneExpFile.endswith(".txt")):
-            adata, genesdic = slidebin.slideBin()
-        else:
-            raise Exception("invalide file format", 1)
-        adata.layers['raw_data'] = adata.X
-
-        sc.pp.filter_cells(adata, min_genes=0)
-        sc.pp.filter_genes(adata, min_cells=0)
-        adata.var['mt'] = adata.var_names.str.startswith(('mt-', 'MT-'))
         sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
 
         adata.raw = adata
@@ -431,6 +416,67 @@ class Visualization():
             pool.join()
         self.h5_join()
 
+class ConvertBinData():
+    """
+    input: The lasso bin gene expression matrix; The complete gene expression matrix
+    return: Binsize=1 gene expression matrix.
+    """
+
+    def __init__(self, partfile, genefile, outfile, binSize):
+        self.typeColumn = {"geneID": 'str', "x": np.uint32, \
+                            "y": np.uint32, "values": np.uint32, 'MIDCount':np.uint32, \
+                            "MIDCounts":np.uint32, "UMICount": np.uint32}
+        self.partfile = partfile
+        self.genefile = genefile
+        self.outfile = outfile
+        self.binSize = binSize
+
+    def __Dumpresult(self, mask, genedf):
+        dst = np.where(mask > 0)
+        dstx = dst[1]
+        dsty = dst[0]
+        tissue = pd.DataFrame()
+        tissue['x'] = [ii + self.Xmin for ii in dstx]
+        tissue['y'] = [ij + self.Ymin for ij in dsty]
+
+        mergedf = pd.merge(genedf, tissue, how='inner', on=['x', 'y'])
+
+        return mergedf
+
+    def __CreateImg(self, df):
+        bindf = pd.DataFrame()
+        bindf['x'] = df['x'] - self.Xmin
+        bindf['y'] = df['y'] - self.Ymin
+        bindf['values'] = [255] * len(df)
+        
+        sparseMt = sparse.csr_matrix((bindf['values'].astype(np.uint8), (bindf['y'], bindf['x'])))
+        img = sparseMt.toarray()
+        return img
+
+    def ConvertData(self):
+        import cv2
+        ### Initial data
+        if self.binSize > 50:
+            raise ValueError("Binsize could not larger than 50.")
+
+        genedf = pd.read_csv(self.genefile, sep='\t', dtype=self.typeColumn)
+        partdf = pd.read_csv(self.partfile, sep='\t', dtype=self.typeColumn)
+        
+        if len(genedf) < len(partdf):
+            raise Warning("Inputs are not correct.")
+        self.Xmin = genedf['x'].min()
+        self.Ymin = genedf['y'].min()
+        print("Processing data..")
+        ### Create Mask
+        part_img = self.__CreateImg(partdf)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*self.binSize, 2*self.binSize))
+        mask = cv2.morphologyEx(part_img, cv2.MORPH_CLOSE, kernel)
+
+        ### Dump results
+        mergedf = self.__Dumpresult(mask, genedf)
+
+        mergedf.to_csv(self.outfile, sep="\t", index=None)
+
 class SaturationPlot():
     def __init__(self, saturationStat, outdir):
         self.saturationStat = saturationStat
@@ -439,15 +485,15 @@ class SaturationPlot():
         import matplotlib.pyplot as plt 
         os.makedirs(self.outdir, exist_ok=True)
         sadf = pd.read_csv(self.saturationStat, sep=" ", quoting=csv.QUOTE_NONE)
-        fig = plt.figure(figsize=(10,4),dpi=100)
+        fig = plt.figure(figsize=(12,5),dpi=100)
         ax = plt.subplot(1, 2, 1)
         ax.plot(sadf['bar_x'], sadf['bar_y1'])
-        ax.set_xlabel("Mean Reads per barcode")
+        ax.set_xlabel("Total reads number of sampling")
         ax.set_ylabel("Sequencing Saturation")
         ax.grid()
         ax = plt.subplot(1, 2, 2)
         ax.plot(sadf['bar_x'], sadf['bar_y2'])
-        ax.set_xlabel("Mean Reads per barcode")
+        ax.set_xlabel("Total reads number of sampling")
         ax.set_ylabel("Median Genes per barcode")
         ax.grid()
         figFilePath = os.path.join(self.outdir, "plot_1x1_saturation.png")
@@ -456,16 +502,39 @@ class SaturationPlot():
         plt.clf()
         ax = plt.subplot(1,2,1)
         ax.plot(sadf['bin_x'], sadf['bar_y1'])
-        ax.set_xlabel("Mean Reads per bin150x150")
+        ax.set_xlabel("Total reads number of sampling")
         ax.set_ylabel("Sequencing Saturation")
         ax.grid()
         ax = plt.subplot(1, 2, 2)
         ax.plot(sadf['bin_x'], sadf['bin_y2'])
-        ax.set_xlabel("Mean Reads per bin150x150")
+        ax.set_xlabel("Total reads number of sampling")
         ax.set_ylabel("Median Genes per bin")
         ax.grid()
         figFilePath = os.path.join(self.outdir, "plot_150x150_saturation.png")
         plt.savefig(figFilePath, format="png")
+
+class MergeGem():
+    def __init__(self, infile, outfile):
+        self.infiles = infile.strip().split(",")
+        self.outfile = outfile
+        self.typeColumn = {"geneID": 'str', "x": np.uint32, \
+                            "y": np.uint32, "values": np.uint32, 'MIDCount':np.uint32, \
+                            "MIDCounts":np.uint32, "UMICount": np.uint32}
+        self.genedf = pd.DataFrame(columns= ['geneID', 'x', 'y', 'MIDCount'])
+    def mergeGem(self):
+        for gemfile in self.infiles:
+            df = pd.read_csv(gemfile, sep="\t", dtype=self.typeColumn, quoting=csv.QUOTE_NONE, comment="#")
+            if "MIDCounts" in df.columns:
+                df.rename(columns={"MIDCounts": "MIDCount"}, inplace=True)
+            elif 'values' in df.columns:
+                df.rename(columns={"values": "MIDCount"}, inplace=True)
+            elif 'UMICount' in df.columns:
+                df.rename(columns={'UMICount': 'MIDCount'}, inplace=True)
+            if self.genedf.empty:
+                self.genedf = df
+            else:
+                self.genedf.append(df, ignore_index=True)
+        self.genedf.to_csv(self.outfile, sep="\t")
 
 if __name__ == "__main__":
     main()
