@@ -445,8 +445,10 @@ class ConvertBinData():
 
     def __CreateImg(self, df):
         bindf = pd.DataFrame()
-        bindf['x'] = df['x'] - self.Xmin
-        bindf['y'] = df['y'] - self.Ymin
+        bindf['x'] = df['x'].apply(lambda x: x-self.Xmin if x>self.Xmin else 0)
+        bindf['y'] = df['y'].apply(lambda x: x-self.Ymin if x>self.Ymin else 0)
+        #bindf['x'] = df['x'] - self.Xmin
+        #bindf['y'] = df['y'] - self.Ymin
         bindf['values'] = [255] * len(df)
         
         sparseMt = sparse.csr_matrix((bindf['values'].astype(np.uint8), (bindf['y'], bindf['x'])))
@@ -466,7 +468,7 @@ class ConvertBinData():
             raise Warning("Inputs are not correct.")
         self.Xmin = genedf['x'].min()
         self.Ymin = genedf['y'].min()
-        print("Processing data..")
+        partdf = partdf.loc[(partdf['x']>=self.Xmin)&(partdf['y']>=self.Ymin)]
         ### Create Mask
         part_img = self.__CreateImg(partdf)
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*self.binSize, 2*self.binSize))
