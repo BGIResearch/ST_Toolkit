@@ -459,8 +459,8 @@ class ConvertBinData():
         if self.binSize > 50:
             raise ValueError("Binsize could not larger than 50.")
 
-        genedf = pd.read_csv(self.genefile, sep='\t', dtype=self.typeColumn)
-        partdf = pd.read_csv(self.partfile, sep='\t', dtype=self.typeColumn)
+        genedf = pd.read_csv(self.genefile, sep='\t', dtype=self.typeColumn, comment="#")
+        partdf = pd.read_csv(self.partfile, sep='\t', dtype=self.typeColumn, comment="#")
         
         if len(genedf) < len(partdf):
             raise Warning("Inputs are not correct.")
