@@ -111,7 +111,7 @@ class SlideBin():
         obs = pd.DataFrame(index = cells)
         var = pd.DataFrame(index = genes)
         adata = anndata.AnnData(X = expMtx, obs = obs, var = var)
-        logging.info("ammdata generate finished...")
+        logging.info("anndata generate finished...")
         return adata, genesdic
 
     def process(self):
@@ -499,7 +499,8 @@ class SaturationPlot():
         ax.set_ylabel("Median Genes per barcode")
         ax.grid()
         figFilePath = os.path.join(self.outdir, "plot_1x1_saturation.png")
-        plt.savefig(figFilePath, format="png")
+        plt.tight_layout()
+        plt.savefig(figFilePath, format="png", bbox_inches='tight')
         fig=plt.figure(figsize=(10,4),dpi=100)
         plt.clf()
         ax = plt.subplot(1,2,1)
@@ -513,7 +514,8 @@ class SaturationPlot():
         ax.set_ylabel("Median Genes per bin")
         ax.grid()
         figFilePath = os.path.join(self.outdir, "plot_150x150_saturation.png")
-        plt.savefig(figFilePath, format="png")
+        plt.tight_layout()
+        plt.savefig(figFilePath, format="png", bbox_inches='tight')
 
 class MergeGem():
     def __init__(self, infile, outfile):
