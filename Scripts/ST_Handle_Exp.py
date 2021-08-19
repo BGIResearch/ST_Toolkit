@@ -522,8 +522,8 @@ class MergeGem():
         self.typeColumn = {"geneID": 'str', "x": np.uint32, \
                             "y": np.uint32, "values": np.uint32, 'MIDCount':np.uint32, \
                             "MIDCounts":np.uint32, "UMICount": np.uint32}
-        self.genedf = pd.DataFrame(columns= ['geneID', 'x', 'y', 'MIDCount'])
     def mergeGem(self):
+        dfs = []
         for gemfile in self.infiles:
             df = pd.read_csv(gemfile, sep="\t", dtype=self.typeColumn, quoting=csv.QUOTE_NONE, comment="#")
             if "MIDCounts" in df.columns:
@@ -532,11 +532,9 @@ class MergeGem():
                 df.rename(columns={"values": "MIDCount"}, inplace=True)
             elif 'UMICount' in df.columns:
                 df.rename(columns={'UMICount': 'MIDCount'}, inplace=True)
-            if self.genedf.empty:
-                self.genedf = df
-            else:
-                self.genedf.append(df, ignore_index=True)
-        self.genedf.to_csv(self.outfile, sep="\t")
+            dfs.append(df)
+        self.genedf = pd.concat(dfs, ignore_index=True, axis=0)
+        self.genedf.to_csv(self.outfile, sep="\t", index=None)
 
 if __name__ == "__main__":
     main()
