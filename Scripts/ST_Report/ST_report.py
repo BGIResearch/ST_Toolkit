@@ -8,12 +8,9 @@ import os
 from optparse import OptionParser
 import sys
 from collections import defaultdict
-from Bio import SeqIO
 import re
 import json
-import types
 import threading
-from bs4 import BeautifulSoup
 from numpy import *
 
 def main():

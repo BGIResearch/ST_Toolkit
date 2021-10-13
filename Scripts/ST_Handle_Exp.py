@@ -146,7 +146,7 @@ class CellCluster():
             else:
                 labelFile = os.path.join(os.path.dirname(self.geneExpFile), "merge_GetExp_gene_labeled_stat.txt")
                 labeldf = pd.read_csv(labelFile, sep="\t")
-                labeldict=dict(zip(labeldf['label'], labeldf['x'].astype(str)+"_"+labeldf['y'].astype(str)))
+                labeldict=dict(zip(labeldf['label'], labeldf['x'].astype(str)+"-"+labeldf['y'].astype(str)))
                 df.replace({'label': labeldict}, inplace=True)
             bindf = df['UMICount'].groupby([df['label'], df['geneID']]).sum()
             cells = set(x[0] for x in bindf.index)
@@ -160,7 +160,12 @@ class CellCluster():
             obs = pd.DataFrame(index = cells)
             var = pd.DataFrame(index = genes)
             adata = anndata.AnnData(X = expMtx, obs = obs, var = var)
-            adata.write(self.outFile)
+            try:
+                adata.write(self.outFile)
+            except:
+                print("binSize is too small, change from {0} to {1}".format(self.binSize, self.binSize*5))
+                self.binSize = self.binSize*5
+                self.scanpyCluster()
             del(df)
             del(bindf)
             adata = sc.read_h5ad(self.outFile) 
@@ -173,8 +178,12 @@ class CellCluster():
         sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
 
         adata.raw = adata
-        sc.pp.normalize_total(adata, target_sum=1e4)
-        sc.pp.log1p(adata)
+        try:
+            sc.pp.normalize_total(adata, target_sum=1e4)
+            sc.pp.log1p(adata)
+        except:
+            print ("this data is not enough to do cell cluster.")
+            exit(0)
         if adata.var.shape[0] < 2000:
             return 0
         sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=2000)
@@ -186,8 +195,16 @@ class CellCluster():
         sc.tl.umap(adata)
         sc.tl.leiden(adata)
         adata.obs['louvain'] = adata.obs['leiden']
-        sc.tl.rank_genes_groups(adata, 'leiden', method='wilcoxon', use_raw=False, n_genes=300, pts=True, layer='raw_data')
-        adata.write(self.outFile)
+        sc.tl.rank_genes_groups(adata, 'leiden', method='wilcoxon', use_raw=False, n_genes=200, pts=True, layer='raw_data')
+        try:
+            adata.write(self.outFile)
+        except:
+            adata.uns.pop('rank_genes_groups')
+            try:
+                adata.write(self.outFile)
+            except:
+                print ("cluster file is too big to write....")
+                exit(0)
 
 class DnbMatting():
     def __init__(self, geneExpFile, outdir, binSize=50):
@@ -487,37 +504,37 @@ class SaturationPlot():
         import matplotlib.pyplot as plt 
         os.makedirs(self.outdir, exist_ok=True)
         sadf = pd.read_csv(self.saturationStat, sep=" ", quoting=csv.QUOTE_NONE)
-        #fig = plt.figure(figsize=(12,5),dpi=100)
-        #ax = plt.subplot(1, 2, 1)
-        #ax.plot(sadf['bar_x'], sadf['bar_y1'])
-        #ax.set_xlabel("Total reads number of sampling")
-        #ax.set_ylabel("Sequencing Saturation")
-        #ax.grid()
-        #ax = plt.subplot(1, 2, 2)
-        #ax.plot(sadf['bar_x'], sadf['bar_y2'])
-        #ax.set_xlabel("Total reads number of sampling")
-        #ax.set_ylabel("Median Genes per barcode")
-        #ax.grid()
-        #figFilePath = os.path.join(self.outdir, "plot_1x1_saturation.png")
-        #plt.tight_layout()
-        #plt.savefig(figFilePath, format="png", bbox_inches='tight')
+        fig = plt.figure(figsize=(12,5),dpi=100)
+        ax = plt.subplot(1, 2, 1)
+        ax.plot(sadf['bar_x'], sadf['bar_y1'])
+        ax.set_xlabel("Total reads number of sampling")
+        ax.set_ylabel("Sequencing Saturation")
+        ax.grid()
+        ax = plt.subplot(1, 2, 2)
+        ax.plot(sadf['bar_x'], sadf['bar_y2'])
+        ax.set_xlabel("Total reads number of sampling")
+        ax.set_ylabel("Median Genes per barcode")
+        ax.grid()
+        figFilePath = os.path.join(self.outdir, "plot_1x1_saturation.png")
+        plt.tight_layout()
+        plt.savefig(figFilePath, format="png", bbox_inches='tight')
         fig=plt.figure(figsize=(10,8),dpi=100)
         plt.clf()
-        ax = plt.subplot(2,2,1)
+        ax = plt.subplot(1,2,1)
         ax.plot(sadf['bin_x'], sadf['bar_y1'])
         ax.set_xlabel("Total reads number of sampling")
         ax.set_ylabel("Sequencing Saturation")
         ax.grid()
-        ax = plt.subplot(2, 2, 2)
+        ax = plt.subplot(1, 2, 2)
         ax.plot(sadf['bin_x'], sadf['bin_y2'])
         ax.set_xlabel("Total reads number of sampling")
         ax.set_ylabel("Median Genes per bin")
         ax.grid()
-        ax = plt.subplot(2, 2, 3)
-        ax.plot(sadf['bin_umi'], sadf['bin_y1'])
-        ax.set_xlabel("Unique reads number of sampling")
-        ax.set_ylabel("Sequencing Saturation")
-        ax.grid()
+        #ax = plt.subplot(2, 2, 3)
+        #ax.plot(sadf['bin_umi'], sadf['bin_y1'])
+        #ax.set_xlabel("Unique reads number of sampling")
+        #ax.set_ylabel("Sequencing Saturation")
+        #ax.grid()
         figFilePath = os.path.join(self.outdir, "plot_150x150_saturation.png")
         plt.tight_layout()
         plt.savefig(figFilePath, format="png", bbox_inches='tight')
