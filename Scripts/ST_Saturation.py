@@ -42,7 +42,7 @@ def getSaturationTable(rawGem, tissueGem, outFile):
     tissuedf['x'] = tissuedf['x'] + offsetX
     tissuedf['y'] = tissuedf['y'] + offsetY
     tissuedf.drop_duplicates(inplace=True)
-    coor = set([x[1] << 32 + x[2] for x in tissuedf.itertuples()])
+    coor = set([(x[1] << 32) + x[2] for x in tissuedf.itertuples()])
     saturation.saturation(rawGem, outFile, coor)
 
 def getSaturationFig(saturationFile, outdir, binSize=200, readsScale=1000000):

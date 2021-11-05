@@ -39,10 +39,13 @@ def _calculate(nestMapData, isBin=False):
         n_genes.append(len(genes))
         n_umis.append(len(umis))
     res = ""
+    ratio = 0.0 if n_reads == 0 else 1-(n_uniq*1.0/n_reads)
+    medianGene = 0 if len(n_genes) == 0 else int(np.median(n_genes))
     if isBin:
-        res = " {} {:.7} {} {}".format(n_reads, 1-(n_uniq*1.0/n_reads), int(np.median(n_genes)), int(np.mean(n_umis)))
+        medianUmi = 0 if len(n_umis) == 0 else int(np.median(n_umis))
+        res = " {} {:.7} {} {}".format(n_reads, ratio, medianGene, medianUmi)
     else:
-        res = " {} {:.7} {} {}".format(n_reads, 1-(n_uniq*1.0/n_reads), int(np.median(n_genes)), n_uniq)
+        res = " {} {:.7} {} {}".format(n_reads, ratio, medianGene, n_uniq)
     return res
 
 # Sampling to reduce the amount of data to be calculated
@@ -73,11 +76,15 @@ def fakeUniqCoordinates(filename):
 # uniqCoordinates: set of coordinates under tissue area, the element type is int64, means ((x<<32) + y)
 # sampleRatio: the percentage of coordinates are taken
 def saturation(inputFile, outputFile, uniqCoordinates=None, sampleRatio=0.05):
+    #print("start saturation, unique coordinates numbers", len(uniqCoordinates))
     data,uniqBinBarcodes = _getData(inputFile, uniqCoordinates)
-    # print("raw data number {}, unique bin coordinates numbers {}".format(len(data), len(uniqBinBarcodes)))
+    if len(data) == 0:
+        print("No data leave after filter by coordinates!")
+        return
+    #print("raw data number {}, unique bin coordinates numbers {}".format(len(data), len(uniqBinBarcodes)))
     # if uniqCoordinates is not None:
     data = _sample(data, uniqBinBarcodes, sampleRatio)
-    # print("data number after sampling", len(data))
+    #print("data number after sampling", len(data))
     random.shuffle(data)
 
     pos = 0
@@ -87,7 +94,7 @@ def saturation(inputFile, outputFile, uniqCoordinates=None, sampleRatio=0.05):
     for pct in SAMPLE_RATIOS:
         outStr += str(pct)
         sampleEndPos = int(len(data)*pct)
-        # print("-----sample:", pct, sampleEndPos)
+        #print("-----sample:", pct, sampleEndPos)
         
         while (pos < sampleEndPos):
             (b1, b2, gene, umi) = data[pos]
@@ -118,7 +125,7 @@ if __name__ == "__main__":
 
     inputFile = sys.argv[1]
     outputFile = sys.argv[2]
-    # uniqCoordinates = None
-    uniqCoordinates = fakeUniqCoordinates(inputFile)
+    uniqCoordinates = None
+    ## uniqCoordinates = fakeUniqCoordinates(inputFile)
     sampleRatio = 0.05
     saturation(inputFile, outputFile, uniqCoordinates, sampleRatio)
