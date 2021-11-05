@@ -144,7 +144,7 @@ class CellCluster():
                 df['y'] = (df['y']/self.binSize).astype(np.uint32)*self.binSize
                 df['label'] = df['x'].astype(str) + "-" + df['y'].astype(str)
             else:
-                labelFile = os.path.join(os.path.dirname(self.geneExpFile), "merge_GetExp_gene_labeled_stat.txt")
+                labelFile = os.path.join(os.path.dirname(self.geneExpFile), "cell_stat.txt")
                 labeldf = pd.read_csv(labelFile, sep="\t")
                 labeldict=dict(zip(labeldf['label'], labeldf['x'].astype(str)+"-"+labeldf['y'].astype(str)))
                 df.replace({'label': labeldict}, inplace=True)
@@ -518,7 +518,7 @@ class SaturationPlot():
         figFilePath = os.path.join(self.outdir, "plot_1x1_saturation.png")
         plt.tight_layout()
         plt.savefig(figFilePath, format="png", bbox_inches='tight')
-        fig=plt.figure(figsize=(10,8),dpi=100)
+        fig=plt.figure(figsize=(12,5),dpi=100)
         plt.clf()
         ax = plt.subplot(1,2,1)
         ax.plot(sadf['bin_x'], sadf['bar_y1'])
