@@ -42,7 +42,7 @@ def getSaturationTable(rawGem, tissueGem, outFile):
     tissuedf['x'] = tissuedf['x'] + offsetX
     tissuedf['y'] = tissuedf['y'] + offsetY
     tissuedf.drop_duplicates(inplace=True)
-    coor = set([(x[1] << 32) + x[2] for x in tissuedf.itertuples()])
+    coor = set([(x[2] << 32) + x[1] for x in tissuedf.itertuples()])
     saturation.saturation(rawGem, outFile, coor, 1)
 
 def getSaturationFig(saturationFile, outdir, binSize=200, readsScale=1):
@@ -89,10 +89,11 @@ def getSaturationFig(saturationFile, outdir, binSize=200, readsScale=1):
     cstr=str(round(fittedParameters[2], 2)) if fittedParameters[2]<0 else "+{0}".format(round(fittedParameters[2], 2)) 
     rstr="R\u00b2={:0.3f}".format(Rsquared)
     labelstr='y={0}*log(x{1}){2}\n{3}'.format(round(fittedParameters[0],2), bstr, cstr, rstr)
+    maxX = _reFunc(threshold, *fittedParameters)
     ax = plt.subplot(1, 3, 3)
     ax.plot(xData/readsScale, yData, marker='o')
-    if (maxY < threshold and Rsquared >= 0.9):         
-        maxX = _reFunc(threshold, *fittedParameters)
+    if (maxY < threshold and Rsquared >= 0.9 and maxX < 100000000000):         
+        #maxX = _reFunc(threshold, *fittedParameters)
         xModel = np.linspace(min(xData), max(xData))
         yModel = _func(xModel, *fittedParameters)
         xModel1 = np.linspace(max(xData), maxX)
@@ -121,7 +122,7 @@ def _getOffset(tissueGem):
             break
         elif "OffsetX" in line:
             offsetX = int(line.strip().split("=")[1])
-        elif "OffsetX" in line:
+        elif "OffsetY" in line:
             offsetY = int(line.strip().split("=")[1])
     return offsetX, offsetY
 
