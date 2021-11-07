@@ -43,7 +43,7 @@ def getSaturationTable(rawGem, tissueGem, outFile):
     tissuedf['y'] = tissuedf['y'] + offsetY
     tissuedf.drop_duplicates(inplace=True)
     coor = set([(x[1] << 32) + x[2] for x in tissuedf.itertuples()])
-    saturation.saturation(rawGem, outFile, coor)
+    saturation.saturation(rawGem, outFile, coor, 1)
 
 def getSaturationFig(saturationFile, outdir, binSize=200, readsScale=1):
     os.makedirs(outdir, exist_ok=True)
@@ -127,13 +127,18 @@ def _getOffset(tissueGem):
 
 def _cur_fit(xData, yData):
     initialParameters = np.array([1.0, 1.0, 1.0])
-    fittedParameters, pcov = curve_fit(_func, xData, yData, initialParameters)
-    modelPredictions = _func(xData, *fittedParameters)
-    absError = modelPredictions - yData
-    SE = np.square(absError) # squared errors
-    MSE = np.mean(SE) # mean squared errors
-    RMSE = np.sqrt(MSE) # Root Mean Squared Error, RMSE
-    Rsquared = 1.0 - (np.var(absError) / np.var(yData))
+    Rsquared = 0
+    try:
+        fittedParameters, pcov = curve_fit(_func, xData, yData, initialParameters)
+        modelPredictions = _func(xData, *fittedParameters)
+        absError = modelPredictions - yData
+        SE = np.square(absError) # squared errors
+        MSE = np.mean(SE) # mean squared errors
+        RMSE = np.sqrt(MSE) # Root Mean Squared Error, RMSE
+        Rsquared = 1.0 - (np.var(absError) / np.var(yData))
+    except:
+        fittedParameters = initialParameters
+        Rsquared = 0
     return Rsquared, fittedParameters
 
 def _func(x, a, b, c):

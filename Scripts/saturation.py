@@ -75,7 +75,7 @@ def fakeUniqCoordinates(filename):
 # outputFile: result of sequencing saturation and medium gene types
 # uniqCoordinates: set of coordinates under tissue area, the element type is int64, means ((x<<32) + y)
 # sampleRatio: the percentage of coordinates are taken
-def saturation(inputFile, outputFile, uniqCoordinates=None, sampleRatio=0.05):
+def saturation(inputFile, outputFile, uniqCoordinates=None, sampleRatio=1):
     #print("start saturation, unique coordinates numbers", len(uniqCoordinates))
     data,uniqBinBarcodes = _getData(inputFile, uniqCoordinates)
     if len(data) == 0:
