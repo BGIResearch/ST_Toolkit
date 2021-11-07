@@ -119,7 +119,7 @@ def _getOffset(tissueGem):
             break
         elif "OffsetX" in line:
             offsetX = int(line.strip().split("=")[1])
-        elif "OffsetX" in line:
+        elif "OffsetY" in line:
             offsetY = int(line.strip().split("=")[1])
     return offsetX, offsetY
 

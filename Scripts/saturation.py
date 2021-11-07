@@ -14,7 +14,7 @@ def _getData(filename, uniqCoordinates):
     with open(filename) as fh_in:
         for line in fh_in:
             line = line.strip().split()
-            barcode = (int(line[0]) << 32) + int(line[1])
+            barcode = (int(line[1]) << 32) + int(line[0])
             if uniqCoordinates is None or barcode in uniqCoordinates:
                 res.append(list(map(int, line)))
                 uniqBinBarcodes.add((int(line[0])//BIN_SIZE << 32) + int(line[1])//BIN_SIZE)
@@ -25,23 +25,29 @@ def _calculate(nestMapData, isBin=False, umisData=None):
     n_reads = 0
     n_uniq = 0
     n_genes = []
+    n_umis = []
     for v1 in nestMapData.values():
         genes = set()
+        umis = set()
         for key,v2 in v1.items():
             n_reads += v2
             gene = (key >> 64)
             genes.add(gene)
+            umi = key & 0xFFFFFFFFFFFFFFFF
+            umis.add(umi)
         n_uniq += len(v1)
         n_genes.append(len(genes))
+        n_umis.append(len(umis))
     res = ""
     ratio = 0.0 if n_reads == 0 else 1-(n_uniq*1.0/n_reads)
     medianGene = 0 if len(n_genes) == 0 else int(np.median(n_genes))
     if isBin:
         umis = []
         for d in umisData:
-            umis.append(umisData[d])
-        medianUmi = 0 if len(umis) == 0 else int(np.median(umis))
-        res = " {} {:.7} {} {}".format(n_reads, ratio, medianGene, medianUmi)
+            umis.append(len(umisData[d]))
+        meanUmi = 0 if len(umis) == 0 else int(np.mean(umis))
+        #meanUmi = 0 if len(n_umis) == 0 else int(np.mean(n_umis))
+        res = " {} {:.7} {} {}".format(n_reads, ratio, medianGene, meanUmi)
     else:
         res = " {} {:.7} {} {}".format(n_reads, ratio, medianGene, n_uniq)
     return res
@@ -64,7 +70,7 @@ def fakeUniqCoordinates(filename):
     with open(filename) as fh_in:
         for line in fh_in:
             line = line.strip().split()
-            barcode = (int(line[0]) << 32) + int(line[1])
+            barcode = (int(line[1]) << 32) + int(line[0])
             res.add(barcode)
     return res
 
@@ -73,8 +79,7 @@ def saturation(inputFile, outputFile, uniqCoordinates=None, sampleRatio=0.05):
     if len(data) == 0:
         print("No data leave after filter by coordinates!")
         return
-    #for i in range(10):
-    #    _saturation(inputFile, outputFile+"."+str(i+1), data, uniqBinBarcodes, uniqCoordinates, sampleRatio)
+
     _saturation(inputFile, outputFile, data, uniqBinBarcodes, uniqCoordinates, sampleRatio)
 
 # Main entrance
@@ -108,13 +113,14 @@ def _saturation(inputFile, outputFile, data, uniqBinBarcodes, uniqCoordinates=No
             if key not in stat_barcode[barcode]: stat_barcode[barcode][key] = 0
             stat_barcode[barcode][key] += 1
 
-            new_barcode = (int(b1/BIN_SIZE) << 32) + int(b2/BIN_SIZE)
+            new_barcode = ((b1//BIN_SIZE) << 32) + (b2//BIN_SIZE)
             if new_barcode not in stat_bin: stat_bin[new_barcode] = {}
             if key not in stat_bin[new_barcode]: stat_bin[new_barcode][key] = 0
             stat_bin[new_barcode][key] += 1
             
-            if new_barcode not in stat_umi: stat_umi[new_barcode] = 0
-            stat_umi[new_barcode] += 1
+            if new_barcode not in stat_umi: stat_umi[new_barcode] = set()
+            uniq_umi = str(b1)+str(b2)+str(gene)+str(umi)
+            stat_umi[new_barcode].add(uniq_umi)
             
             pos += 1
 
