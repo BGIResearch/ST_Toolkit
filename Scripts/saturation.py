@@ -21,28 +21,26 @@ def _getData(filename, uniqCoordinates):
     return res,uniqBinBarcodes
 
 # Calculate sequencing saturation and medium gene numbers
-def _calculate(nestMapData, isBin=False):
+def _calculate(nestMapData, isBin=False, umisData=None):
     n_reads = 0
     n_uniq = 0
     n_genes = []
-    n_umis = []
     for v1 in nestMapData.values():
         genes = set()
-        umis = set()
         for key,v2 in v1.items():
             n_reads += v2
             gene = (key >> 64)
             genes.add(gene)
-            umi = (key & 0xFFFFFFFFFFFFFFFF)
-            umis.add(umi)
         n_uniq += len(v1)
         n_genes.append(len(genes))
-        n_umis.append(len(umis))
     res = ""
     ratio = 0.0 if n_reads == 0 else 1-(n_uniq*1.0/n_reads)
     medianGene = 0 if len(n_genes) == 0 else int(np.median(n_genes))
     if isBin:
-        medianUmi = 0 if len(n_umis) == 0 else int(np.median(n_umis))
+        umis = []
+        for d in umisData:
+            umis.append(umisData[d])
+        medianUmi = 0 if len(umis) == 0 else int(np.median(umis))
         res = " {} {:.7} {} {}".format(n_reads, ratio, medianGene, medianUmi)
     else:
         res = " {} {:.7} {} {}".format(n_reads, ratio, medianGene, n_uniq)
@@ -70,17 +68,22 @@ def fakeUniqCoordinates(filename):
             res.add(barcode)
     return res
 
+def saturation(inputFile, outputFile, uniqCoordinates=None, sampleRatio=0.05):
+    data,uniqBinBarcodes = _getData(inputFile, uniqCoordinates)
+    if len(data) == 0:
+        print("No data leave after filter by coordinates!")
+        return
+    #for i in range(10):
+    #    _saturation(inputFile, outputFile+"."+str(i+1), data, uniqBinBarcodes, uniqCoordinates, sampleRatio)
+    _saturation(inputFile, outputFile, data, uniqBinBarcodes, uniqCoordinates, sampleRatio)
+
 # Main entrance
 # inputFile: format like, "x y gene umi count"
 # outputFile: result of sequencing saturation and medium gene types
 # uniqCoordinates: set of coordinates under tissue area, the element type is int64, means ((x<<32) + y)
 # sampleRatio: the percentage of coordinates are taken
-def saturation(inputFile, outputFile, uniqCoordinates=None, sampleRatio=0.05):
+def _saturation(inputFile, outputFile, data, uniqBinBarcodes, uniqCoordinates=None, sampleRatio=0.05):
     #print("start saturation, unique coordinates numbers", len(uniqCoordinates))
-    data,uniqBinBarcodes = _getData(inputFile, uniqCoordinates)
-    if len(data) == 0:
-        print("No data leave after filter by coordinates!")
-        return
     #print("raw data number {}, unique bin coordinates numbers {}".format(len(data), len(uniqBinBarcodes)))
     # if uniqCoordinates is not None:
     data = _sample(data, uniqBinBarcodes, sampleRatio)
@@ -90,6 +93,7 @@ def saturation(inputFile, outputFile, uniqCoordinates=None, sampleRatio=0.05):
     pos = 0
     stat_barcode = {}
     stat_bin = {}
+    stat_umi = {}
     outStr = "#sample bar_x bar_y1 bar_y2 bar_umi bin_x bin_y1 bin_y2 bin_umi\n"
     for pct in SAMPLE_RATIOS:
         outStr += str(pct)
@@ -109,10 +113,13 @@ def saturation(inputFile, outputFile, uniqCoordinates=None, sampleRatio=0.05):
             if key not in stat_bin[new_barcode]: stat_bin[new_barcode][key] = 0
             stat_bin[new_barcode][key] += 1
             
+            if new_barcode not in stat_umi: stat_umi[new_barcode] = 0
+            stat_umi[new_barcode] += 1
+            
             pos += 1
 
-        outStr += _calculate(stat_barcode)
-        outStr += _calculate(stat_bin, True)
+        outStr += _calculate(stat_barcode, False)
+        outStr += _calculate(stat_bin, True, stat_umi)
         outStr += "\n"
 
     with open(outputFile, 'w') as fh_out:
