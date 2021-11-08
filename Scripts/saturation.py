@@ -87,7 +87,7 @@ def saturation(inputFile, outputFile, uniqCoordinates=None, sampleRatio=0.05):
 
     _saturation(inputFile, outputFile, data, uniqBinBarcodes, uniqCoordinates, sampleRatio)
 
-def _saturation(inputFile, outputFile, data, uniqBinBarcodes, uniqCoordinates=None, sampleRatio):
+def _saturation(inputFile, outputFile, data, uniqBinBarcodes, uniqCoordinates=None, sampleRatio=0.05):
     #print("start saturation, unique coordinates numbers", len(uniqCoordinates))
     #print("raw data number {}, unique bin coordinates numbers {}".format(len(data), len(uniqBinBarcodes)))
     # if uniqCoordinates is not None:
