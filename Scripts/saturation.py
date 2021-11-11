@@ -21,7 +21,7 @@ def _getData(filename, uniqCoordinates):
     return res,uniqBinBarcodes
 
 # Calculate sequencing saturation and medium gene numbers
-def _calculate(nestMapData, isBin=False, umisData=None):
+def _calculate(nestMapData, realReads, isBin=False, umisData=None):
     n_reads = 0
     n_uniq = 0
     n_genes = []
@@ -47,9 +47,11 @@ def _calculate(nestMapData, isBin=False, umisData=None):
             umis.append(len(umisData[d]))
         meanUmi = 0 if len(umis) == 0 else int(np.mean(umis))
         #meanUmi = 0 if len(n_umis) == 0 else int(np.mean(n_umis))
-        res = " {} {:.7} {} {}".format(n_reads, ratio, medianGene, meanUmi)
+        res = " {} {:.7} {} {}".format(realReads, ratio, medianGene, meanUmi)
     else:
-        res = " {} {:.7} {} {}".format(n_reads, ratio, medianGene, n_uniq)
+        if n_reads != 0:
+            n_uniq = int(n_uniq*realReads/n_reads)
+        res = " {} {:.7} {} {}".format(realReads, ratio, medianGene, n_uniq)
     return res
 
 # Sampling to reduce the amount of data to be calculated
@@ -90,6 +92,9 @@ def saturation(inputFile, outputFile, uniqCoordinates=None, sampleRatio=0.05):
 def _saturation(inputFile, outputFile, data, uniqBinBarcodes, uniqCoordinates=None, sampleRatio=0.05):
     #print("start saturation, unique coordinates numbers", len(uniqCoordinates))
     #print("raw data number {}, unique bin coordinates numbers {}".format(len(data), len(uniqBinBarcodes)))
+    totalReadsNum = 0
+    for line in data:
+        totalReadsNum += line[-1]
     # if uniqCoordinates is not None:
     data = _sample(data, uniqBinBarcodes, sampleRatio)
     #print("data number after sampling", len(data))
@@ -104,6 +109,7 @@ def _saturation(inputFile, outputFile, data, uniqBinBarcodes, uniqCoordinates=No
         outStr += str(pct)
         sampleEndPos = int(len(data)*pct)
         #print("-----sample:", pct, sampleEndPos)
+        realReads = int(totalReadsNum * pct)
         
         while (pos < sampleEndPos):
             (b1, b2, gene, umi) = data[pos]
@@ -124,8 +130,8 @@ def _saturation(inputFile, outputFile, data, uniqBinBarcodes, uniqCoordinates=No
             
             pos += 1
 
-        outStr += _calculate(stat_barcode, False)
-        outStr += _calculate(stat_bin, True, stat_umi)
+        outStr += _calculate(stat_barcode, realReads, False)
+        outStr += _calculate(stat_bin, realReads, True, stat_umi)
         outStr += "\n"
 
     with open(outputFile, 'w') as fh_out:
