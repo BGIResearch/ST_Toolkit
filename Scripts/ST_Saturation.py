@@ -108,7 +108,7 @@ def getSaturationFig(saturationFile, outdir, binSize=200, readsScale=1):
     ax.legend()
     plt.axhline(threshold, color='green', lw=1, alpha=0.7)
     plt.text(int(max(xData)/readsScale),max(yData),(int(max(xData)/readsScale),max(yData)),color='b')
-    plt.text(max(xData)/4, 100, labelstr)   
+    plt.text(max(xData)/4, min(yData)+100, labelstr)   
     figFilePath = os.path.join(outdir, "plot_{0}x{0}_saturation.png".format(binSize))
     plt.tight_layout()
     plt.savefig(figFilePath, format="png", bbox_inches='tight')

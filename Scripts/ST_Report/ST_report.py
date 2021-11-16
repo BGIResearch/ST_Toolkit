@@ -47,7 +47,7 @@ class statistic():
 		self.cell_cluster = result_path + '/result/GetExp/tissueCut/cell_cluster.h5ad'
 		self.tissueCut = result_path + '/result/GetExp/tissueCut/segmentation/TissueCut.log'
 		self.final_result_json = outfile_path + '/new_final_result.json'
-		self.saturation_file = result_path + "/result/GetExp/sequence_saturation.txt"
+		#self.saturation_file = result_path + "/result/GetExp/sequence_saturation.txt"
 		self.result_dict = defaultdict(dict)
 		self.result_dict['version'] = "version_v2"
 	
@@ -67,8 +67,8 @@ class statistic():
 			self.copy2()
 		if os.path.exists(self.figure_path):
 			self.copy()
-		if os.path.exists(self.saturation_file):
-			self.saturationPlot()
+		#if os.path.exists(self.saturation_file):
+		#	self.saturationPlot()
 		with open(self.final_result_json,'w') as f:
 			t_result_dict = json.loads(json.dumps(self.result_dict).replace('Umi','MID').replace('umi','MID').replace('barcode','CID').replace('Barcode','CID'))
 			j = json.dump(t_result_dict, f, indent=4)
