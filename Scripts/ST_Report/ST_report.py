@@ -143,7 +143,7 @@ class statistic():
 						sub_title = '4.2.TissueCut_Bin_stat'
 						total_title = '4.1.TissueCut_Total_Stat'
 						final_title = '4.TissueCut'
-				elif line_num < 9:
+				elif line_num < 10:
 					name = line.strip().split(':')[0]
 					value = self.number_transfer(line.strip().split(':')[1])
 					total_dict[name] = value
