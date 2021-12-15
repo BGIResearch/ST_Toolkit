@@ -6,7 +6,7 @@ BIN_SIZE = 200
 SAMPLE_RATIOS = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 
 # Read raw data from file, and filtered by coordinates
-# raw data format: x y gene umi cnt
+# raw data format: y x gene umi cnt
 def _getData(filename, uniqCoordinates):
     res = []
     uniqBinBarcodes = set()
@@ -76,7 +76,7 @@ def fakeUniqCoordinates(filename):
     return res
 
 # Main entrance
-# inputFile: format like, "x y gene umi count"
+# inputFile: format like, "y x gene umi count"
 # outputFile: result of sequencing saturation and medium gene types
 # uniqCoordinates: set of coordinates under tissue area, the element type is int64, means ((x<<32) + y)
 # sampleRatio: the percentage of coordinates are taken
